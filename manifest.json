@@ -1,0 +1,9 @@
+{
+  "id": "riddle-diary",
+  "name": "Riddle Diary",
+  "version": "1.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "A diary that writes back with Claude/OpenAI APIs or desktop Codex, Claude Code and Gemini CLIs.",
+  "author": "mermalat",
+  "isDesktopOnly": false
+}

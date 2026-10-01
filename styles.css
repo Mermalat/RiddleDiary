@@ -1,0 +1,28 @@
+.riddle-diary-writing {
+  border-inline-start: 2px solid var(--interactive-accent);
+  padding-inline-start: 0.65rem;
+}
+
+.riddle-diary-ink {
+  animation: riddle-diary-settle 650ms ease-out both;
+}
+
+@keyframes riddle-diary-settle {
+  from { opacity: 0.25; filter: blur(0.6px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .riddle-diary-ink { animation: none; }
+}
+
+.riddle-diary-persona {
+  width: min(100%, 32rem);
+  min-width: 16rem;
+  resize: vertical;
+}
+
+.riddle-diary-settings-note {
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
