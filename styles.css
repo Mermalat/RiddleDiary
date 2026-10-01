@@ -1,14 +1,14 @@
 .riddle-diary-writing {
-  border-inline-start: 2px solid var(--interactive-accent);
+  border-inline-start: 2px solid var(--background-modifier-border);
   padding-inline-start: 0.65rem;
 }
 
 .riddle-diary-ink {
-  animation: riddle-diary-settle 650ms ease-out both;
+  animation: riddle-diary-settle 700ms ease-out both;
 }
 
 @keyframes riddle-diary-settle {
-  from { opacity: 0.25; filter: blur(0.6px); }
+  from { opacity: 0.08; filter: blur(1px); }
   to { opacity: 1; filter: blur(0); }
 }
 

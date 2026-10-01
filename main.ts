@@ -4,10 +4,10 @@ import { Prec } from "@codemirror/state";
 import { buildMessages, frontmatterEnd, insideAnswer, insideCodeFence } from "./context";
 import { createProvider } from "./providers";
 import { DiaryError } from "./providers/provider";
-import { DiarySettingTab, loadSettings } from "./settings";
+import { DiarySettingTab, diaryIdentity, loadSettings } from "./settings";
 import { triggerExtension, type TriggerMatch } from "./trigger";
 import type { DiarySettings } from "./types";
-import { diaryEdit, ReplyWriter, writerExtension } from "./writer";
+import { boldQuestion, diaryEdit, ReplyWriter, writerExtension } from "./writer";
 
 interface ActiveReply {
   file: TFile;
@@ -143,10 +143,18 @@ export default class RiddleDiaryPlugin extends Plugin {
     }
     const messages = buildMessages(view.state.doc.toString(), this.settings.contextMode, cursor);
     if (!messages.some(message => message.role === "user")) { new Notice("Write something to the diary first."); return; }
+    const question = view.state.doc.lineAt(trigger ? trigger.flagFrom : cursor);
+    const formatted = boldQuestion(question.text);
+    if (formatted !== question.text) {
+      const changes = view.state.changes({ from: question.from, to: question.to, insert: formatted });
+      cursor = changes.mapPos(cursor, 1);
+      view.dispatch({ changes, annotations: diaryEdit.of(true) });
+    }
     const provider = createProvider(this.settings);
-    const systemPrompt = this.settings.plainAssistant ? "" : this.settings.personaPrompt;
+    const { label, systemPrompt } = diaryIdentity(this.settings);
     const controller = new AbortController();
-    const writer = new ReplyWriter(view, cursor, provider.label, this.settings.inkEffect);
+    const ink = this.settings.inkEffect && !view.dom.ownerDocument.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const writer = new ReplyWriter(view, cursor, label, ink);
     const active: ActiveReply = {
       file, controller, writer,
       timeout: setTimeout(() => this.cancel(active, "Reply timed out. Try again when the provider is available."), 120000)
@@ -162,6 +170,7 @@ export default class RiddleDiaryPlugin extends Plugin {
         }
         writer.append(chunk);
       }
+      await writer.drain();
       if (this.active.get(file) === active) writer.finish(preview ? "Offline preview — no API request was sent." : undefined);
     } catch (error) {
       if (this.active.get(file) === active) {

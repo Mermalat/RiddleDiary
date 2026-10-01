@@ -39,6 +39,7 @@ export interface ProviderCredentials {
 }
 
 export interface DiarySettings {
+  diaryName: string;
   provider: ProviderId;
   providers: Record<ApiProviderId, ProviderCredentials>;
   cli: Record<CliProviderId, CliSettings>;

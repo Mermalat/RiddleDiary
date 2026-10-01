@@ -7,7 +7,7 @@ This is an independent fan-inspired project, with no affiliation to the Harry Po
 ## Quick start
 
 1. Install and enable the plugin using the instructions below.
-2. Open **Settings → Riddle Diary**. Choose an API provider and enter its API key, or choose a desktop CLI provider that is already signed in in your terminal.
+2. Open **Settings → Riddle Diary**. Set your **Diary name** (default: `cupcake`), then choose an API provider and enter its API key, or choose a desktop CLI provider that is already signed in in your terminal. Enable **Ink effect** to watch the reply appear gradually.
 3. In a saved Markdown note in editing mode, type a line ending with `../` and press **Enter**:
 
    ```text
@@ -18,7 +18,7 @@ This is an independent fan-inspired project, with no affiliation to the Harry Po
 
    ```markdown
    ---
-   **Claude answers**
+   **cupcake answers**
 
    *the ink is settling...*
 
@@ -27,7 +27,9 @@ This is an independent fan-inspired project, with no affiliation to the Harry Po
 
 5. Streamed text replaces the placeholder. Write your next entry below the closing rule.
 
-OpenAI uses **Codex answers**. Both labels come from the provider configuration, not the writer. The reply block is closed from the moment it is inserted; network errors, cancellation, and timeouts keep it closed. Errors include a short explanation and retain any partial reply. An invisible status comment distinguishes unfinished/error/preview blocks from genuine completed assistant turns.
+Your diary name is independent of the provider: Claude, OpenAI and all CLI connections use **cupcake answers** until you change the name. When the persona is enabled, the diary is also told its name. Plain assistant mode still sends no system prompt. Older provider-labelled replies remain readable as conversation history; changing the name does not rewrite old notes.
+
+Plain-text question lines become **bold** when submitted. Existing headings, lists, quotes, code, tables and already-bold text keep their formatting. Replies have one blank line between each part, with no extra empty line left by Enter. The reply block is closed from the moment it is inserted; network errors, cancellation, and timeouts keep it closed. Errors include a short explanation and retain any visible partial reply. An invisible status comment distinguishes unfinished/error/preview blocks from genuine completed assistant turns.
 
 Commands appear in Obsidian with the plugin prefix:
 
@@ -41,6 +43,7 @@ Commands appear in Obsidian with the plugin prefix:
 
 | Setting | Behavior / default |
 | --- | --- |
+| Diary name | `cupcake`; applies across providers; one plain-text line, up to 60 characters |
 | Provider | Anthropic/OpenAI APIs, Codex CLI, Claude Code, Gemini CLI; default Anthropic |
 | API keys | Separate password-style inputs, stored in plugin data |
 | Models | Editable per provider; defaults `claude-sonnet-5-5` and `gpt-5.3-codex` |
@@ -51,7 +54,9 @@ Commands appear in Obsidian with the plugin prefix:
 | Transport | API only: live `fetch` (default), or buffered `requestUrl`; CLI output comes from local processes |
 | Plain assistant mode | Off by default; when on, no persona system prompt is sent |
 | Diary persona | Editable system prompt; preserved when plain mode is enabled |
-| Ink effect | Off by default; fade newly rendered reply lines, respecting reduced motion |
+| Ink effect | Off by default; gradual character reveal with a fade on fresh text; reduced motion skips both |
+
+Ink works even when Codex CLI or buffered HTTP returns a completed message. Received text is revealed in small Unicode-safe batches, with adaptive pacing for long replies. Existing text stays settled as new text appears. Escape also cancels this visual reveal, discarding unrevealed text and retaining a closed cancellation block. The note stays locked until its reveal finishes. **Diary: preview ink (offline)** uses the same writer, with no provider call.
 
 API model availability depends on your API account. Reasoning models use part of the output-token budget for reasoning; increase max tokens if the model finishes without visible text. The OpenAI API option uses the **Responses API**. The separate **Codex CLI** option uses your CLI's existing login, including ChatGPT sign-in.
 
@@ -59,11 +64,11 @@ API model availability depends on your API account. Reasoning models use part of
 
 The CLI must already be installed and signed in under the same OS account as Obsidian. The plugin does not install CLIs or copy their tokens. Sign in in your terminal, then select the matching provider:
 
-| Provider | Terminal setup | Default executable | Reply label |
-| --- | --- | --- | --- |
-| Codex CLI | `codex login` → sign in with ChatGPT; check with `codex login status` | `codex` | Codex answers |
-| Claude Code | Run `claude` and complete login; check with `claude auth status` | `claude` | Claude answers |
-| Gemini CLI | Run `gemini` and choose Login with Google | `gemini` | Gemini answers |
+| Provider | Terminal setup | Default executable |
+| --- | --- | --- |
+| Codex CLI | `codex login` → sign in with ChatGPT; check with `codex login status` | `codex` |
+| Claude Code | Run `claude` and complete login; check with `claude auth status` | `claude` |
+| Gemini CLI | Run `gemini` and choose Login with Google | `gemini` |
 
 In **Settings → Riddle Diary**, choose that provider. Leave the model empty initially and click **Check installation**. Then write a normal `../` entry. API keys are unnecessary when the CLI is already using an eligible account login. Account entitlements, rate limits and any CLI-configured billing still apply; this does not turn a subscription into a general-purpose API key. See [Codex authentication](https://developers.openai.com/codex/auth), [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference), and [Gemini authentication](https://geminicli.com/docs/get-started/authentication/).
 
@@ -84,7 +89,7 @@ Verified executable versions: Codex CLI **0.159.2**, Claude Code **2.1.278**, Ge
 ## Conversation context
 
 - Frontmatter at the start of the note is omitted, including BOM/CRLF and unfinished metadata.
-- Earlier blocks with `---`, then `**<provider> answers**`, then reply text and a closing `---` become assistant turns. Labels are recognized generically for future providers.
+- Earlier blocks with `---`, then `**<name> answers**`, then reply text and a closing `---` become assistant turns. Custom diary names and old provider labels both work, including after a rename.
 - Everything else becomes user turns. Consecutive turns with the same role are merged.
 - Ordinary horizontal rules and examples inside fenced code remain user text.
 - Loading, failed, cancelled, offline-preview, and incomplete blocks are omitted from assistant history.
@@ -99,7 +104,7 @@ The plugin sends Markdown text only. It does not resolve links, read linked note
 Use Node.js 22 or later and npm. API providers do not require a separate Node installation. Desktop CLI providers require their usual working terminal installation; Obsidian supplies the desktop Node process API.
 
 ```sh
-cd /Users/mermalat/Code/TomsDiary
+cd /Users/mermalat/Code/TomsDiary/TomsDiary
 npm ci
 npm run build
 npm test
@@ -182,14 +187,18 @@ Deliberately not implemented / not yet live-verified:
 - A manually typed top-level horizontal rule inside an old answer block is ambiguous; the first unfenced `---` closes it. Generated replies avoid this ambiguity.
 - Other plugins that reformat whole notes or external sync changes may interrupt a reply. Remote edits are not reconciled into an active API conversation.
 - Editor undo is native CodeMirror history; a streamed reply is not guaranteed to be one undo step.
-- The optional user-line sinking animation is omitted; the requested reply-line ink effect is implemented.
+- The optional user-line sinking animation is omitted. The reply effect animates newly revealed text; it does not fade the user's entry.
 - Device-specific mobile CORS/keyboard behavior and real authenticated provider responses require live testing with your API account and mobile device. Mocked API tests do not establish that account's model availability.
 
 ## Verification
 
 `npm test` runs regression tests for conversation parsing, triggers, tracked editor writes, SSE framing/UTF-8/cancellation, Claude/OpenAI request formats, text-only streaming, buffered responses, missing keys, sanitized errors, premature EOF, and token-limit endings. It bundles tests into a temporary directory and substitutes a test-only Obsidian HTTP adapter; the adapter is never bundled into the plugin.
 
-Verified locally on October 1, 2026: the production build and 45 regression tests pass. Tests include API/CLI settings migration, all three CLI output formats, no-shell/stdin handling, Unicode, real child-process cancellation, login prompts and the mobile platform guard. The original desktop checks in Obsidian 1.13.7 confirmed trigger removal, closed error blocks, offline streaming, ink and Escape. Version 1.1.0 is installed in the local vault, with all three shipped files matching the build. In Obsidian, Codex CLI was detected at `/opt/homebrew/bin/codex`, produced a real Turkish reply using the existing ChatGPT login, and recalled its earlier greeting in a second reply. The live conversation is open in **Riddle Diary - CLI Deneme**. Claude Code is installed but not signed in; Gemini requires terminal authentication, so authenticated replies for those two remain unverified. API account availability and real mobile-device behavior remain unverified.
+Version 1.2.0: the production build and 53 regression tests pass. New tests cover diary-name migration, provider-independent identity, plain mode, mixed old/custom-label history, question formatting, spacing and cursor placement, gradual completed-message reveal, settled ink decorations, Unicode, and cancellation or edits during reveal. Tests also include all three CLI output formats, no-shell/stdin handling, real child-process cancellation, login prompts and the mobile platform guard.
+
+Desktop verification on October 1, 2026: version 1.2.0 is installed and loaded in Obsidian 1.13.7; `main.js`, `manifest.json` and `styles.css` match the build. The **Riddle Diary - cupcake** note shows the new name, bold questions, a visible fresh-ink fade during the offline preview, and a real Codex CLI reply introducing itself as cupcake. The Enter trigger removed its flag and the completed reply remained inside closed rules. Existing Codex login and ink preferences were retained.
+
+Earlier desktop checks in Obsidian 1.13.7 confirmed trigger removal, closed error blocks, offline streaming and Escape. Codex CLI produced a real Turkish reply using the existing ChatGPT login and recalled its earlier greeting in a second reply in **Riddle Diary - CLI Deneme**. Claude Code and Gemini authenticated replies, API account availability and real mobile-device behavior remain unverified.
 
 Optional real-account CLI smoke test (sends a synthetic one-sentence entry, never vault content):
 
@@ -242,6 +251,7 @@ TomsDiary/
 │   ├── sse.test.ts
 │   ├── providers.test.ts
 │   ├── cli.test.ts
+│   ├── settings.test.ts
 │   └── obsidian-mock.ts
 └── examples/
     └── Riddle Diary - Start Here.md

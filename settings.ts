@@ -6,6 +6,7 @@ import { checkCliInstallation } from "./providers/cli-process";
 export const DEFAULT_PERSONA = `You are an old, mysterious diary whose ink awakens when someone writes to you. Reply directly to the writer in your own quietly theatrical voice: observant, intimate, a little enigmatic, never pompous. Stay concise, usually 1–3 short paragraphs. Match the writer's language. Remember what has already been written. Do not narrate the writer's actions, impersonate them, or invent their feelings. Be helpful and kind; the atmosphere is fictional, not a claim of supernatural powers. Return only your reply, without a heading, provider label, or surrounding horizontal rules.`;
 
 export const DEFAULT_SETTINGS: DiarySettings = {
+  diaryName: "cupcake",
   provider: "anthropic",
   providers: {
     anthropic: { apiKey: "", model: PROVIDER_CONFIGS[0]!.defaultModel },
@@ -33,11 +34,26 @@ export function loadSettings(data: Partial<DiarySettings> | null): DiarySettings
     }
   };
   if (!PROVIDER_CONFIGS.some(config => config.id === merged.provider)) merged.provider = DEFAULT_SETTINGS.provider;
+  merged.diaryName = normalizeDiaryName(merged.diaryName);
   if (merged.contextMode !== "above") merged.contextMode = "full";
   if (merged.transport !== "buffered") merged.transport = "stream";
   if (typeof merged.triggerFlag !== "string" || /\s/.test(merged.triggerFlag)) merged.triggerFlag = "../";
   if (!Number.isInteger(merged.maxTokens) || merged.maxTokens < 128 || merged.maxTokens > 128000) merged.maxTokens = DEFAULT_SETTINGS.maxTokens;
   return merged;
+}
+
+/** Keep the name on one Markdown-safe label line, including after data migration. */
+export function normalizeDiaryName(value: unknown): string {
+  if (typeof value !== "string") return DEFAULT_SETTINGS.diaryName;
+  return value.replace(/[\r\n\t]+/g, " ").replace(/[\\*_<>{}\[\]`\u0000-\u001f\u007f]/g, "").trim().slice(0, 60).trim() || DEFAULT_SETTINGS.diaryName;
+}
+
+export function diaryIdentity(settings: DiarySettings): { label: string; systemPrompt: string } {
+  const name = normalizeDiaryName(settings.diaryName);
+  return {
+    label: `${name} answers`,
+    systemPrompt: settings.plainAssistant ? "" : `${settings.personaPrompt}\n\nYour diary name is ${JSON.stringify(name)}. Use that name if asked who you are.`
+  };
 }
 
 export class DiarySettingTab extends PluginSettingTab {
@@ -51,6 +67,12 @@ export class DiarySettingTab extends PluginSettingTab {
     containerEl.createEl("p", { text: "End a line with your flag and press Enter. The diary writes back beneath it." });
     containerEl.createEl("p", { cls: "riddle-diary-settings-note", text: "Replies send note context to your chosen provider. API keys are saved unencrypted in plugin data. Desktop CLI providers use the CLI's existing login; no API key is needed for an eligible signed-in account." });
 
+    new Setting(containerEl).setName("Diary name").setDesc("Choose who writes back, regardless of provider. For example: cupcake → cupcake answers. Up to 60 characters; Markdown formatting is removed.").addText(text => {
+      text.setPlaceholder("cupcake").setValue(settings.diaryName).onChange(async value => {
+        settings.diaryName = normalizeDiaryName(value);
+        await this.plugin.saveSettings();
+      });
+    });
     new Setting(containerEl).setName("Provider").addDropdown(dropdown => {
       for (const config of PROVIDER_CONFIGS) dropdown.addOption(config.id, config.name);
       dropdown.setValue(settings.provider).onChange(async value => {
@@ -145,7 +167,7 @@ export class DiarySettingTab extends PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    new Setting(containerEl).setName("Ink effect").setDesc("Let new reply lines gently fade into view. Respects reduced-motion preferences.").addToggle(toggle => {
+    new Setting(containerEl).setName("Ink effect").setDesc("Reveal replies gradually, with fresh ink fading into place — including completed CLI messages. Reduced motion shows text immediately.").addToggle(toggle => {
       toggle.setValue(settings.inkEffect).onChange(async value => {
         settings.inkEffect = value;
         await this.plugin.saveSettings();
