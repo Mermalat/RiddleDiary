@@ -14,6 +14,6 @@ export interface ProviderOptions extends ProviderCredentials {
 export class DiaryError extends Error {}
 
 export function validateOptions(options: ProviderOptions): void {
-  if (!options.apiKey.trim()) throw new DiaryError("Add an API key in Settings → Riddle Diary.");
+  if (!options.apiKey.trim()) throw new DiaryError("Add an API key in Settings → Riddle Diary using Obsidian secret storage.");
   if (!options.model.trim()) throw new DiaryError("Set a model name in Settings → Riddle Diary.");
 }

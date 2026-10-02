@@ -7,7 +7,7 @@ This is an independent fan-inspired project, with no affiliation to the Harry Po
 ## Quick start
 
 1. Install and enable the plugin using the instructions below.
-2. Open **Settings → Riddle Diary**. Set your **Diary name** (default: `cupcake`), then choose an API provider and enter its API key, or choose a desktop CLI provider that is already signed in in your terminal. Enable **Ink effect** to watch the reply appear gradually.
+2. Open **Settings → Riddle Diary**. Set your **Diary name** (default: `cupcake`), then choose an API provider and select or create its key in Obsidian secret storage, or choose a desktop CLI provider that is already signed in in your terminal. Requires Obsidian 1.11.4 or later. Enable **Ink effect** to watch the reply appear gradually.
 3. In a saved Markdown note in editing mode, type a line ending with `../` and press **Enter**:
 
    ```text
@@ -45,7 +45,7 @@ Commands appear in Obsidian with the plugin prefix:
 | --- | --- |
 | Diary name | `cupcake`; applies across providers; one plain-text line, up to 60 characters |
 | Provider | Anthropic/OpenAI APIs, Codex CLI, Claude Code, Gemini CLI; default Anthropic |
-| API keys | Separate password-style inputs, stored in plugin data |
+| API keys | Select/create a named key in Obsidian secret storage; plugin data stores the name only |
 | Models | Editable per provider; defaults `claude-sonnet-5-5` and `gpt-5.3-codex` |
 | Trigger flag | `../`; must contain no whitespace; empty disables automatic triggering |
 | Context | Full note (default), or text through the current line / trigger cursor |
@@ -77,7 +77,7 @@ If Obsidian cannot find the command, run `command -v codex`, `command -v claude`
 Each reply starts a fresh process in an isolated temporary directory. Note context and role-tagged conversation history go to its stdin as JSON; the note is not added to command-line arguments. CLI tools receive the same context selection and editable persona as API providers. CLI history is reconstructed from the note rather than resumed from a terminal session. The serialized history is part of a single CLI prompt, rather than separate native API turns.
 
 - **Codex:** `exec --json`, ephemeral session, read-only sandbox, no approval prompts, shell tool and web search disabled, MCP configuration omitted, project instructions and memories disabled. User config/rules are skipped while the existing authentication location is retained. An empty model uses the CLI's built-in default; set a model explicitly to override it. Only completed agent-message events are inserted, so Codex appears in completed-message chunks rather than token by token. See [non-interactive mode](https://developers.openai.com/codex/noninteractive).
-- **Claude Code:** `--print --output-format stream-json --include-partial-messages`, built-in tools disabled, strict empty MCP configuration, safe mode and no saved session. Authentication remains available in safe mode. Only main-turn text deltas are inserted; reasoning, tool output and repeated final text are omitted. See [programmatic streaming](https://code.claude.com/docs/en/headless).
+- **Claude Code:** `--print --output-format stream-json --include-partial-messages`, built-in tools disabled, strict empty MCP configuration, safe mode and no saved session. MCP tools also receive an explicit deny rule. The persona is passed using `--system-prompt-file` from a private temporary file, so its content is absent from process arguments. Authentication remains available in safe mode. Only main-turn text deltas are inserted; reasoning, tool output and repeated final text are omitted. See [programmatic streaming](https://code.claude.com/docs/en/headless).
 - **Gemini:** headless streaming JSON, extensions disabled, hooks disabled by local settings, a deny-all tool policy, and persona through `GEMINI_SYSTEM_MD`. Cached authentication stays under the CLI's control. Interactive browser login is suppressed; sign in from a terminal first. Gemini can retain its own session/cache data under its usual home directory. Only assistant message chunks are inserted. See [headless output](https://geminicli.com/docs/cli/headless/) and [policy engine](https://geminicli.com/docs/reference/policy-engine/).
 
 These protections restrict the coding agents' tools; they are not an OS isolation boundary for the executable itself. Only configure a CLI executable you trust. Managed CLI policies can still apply. Temporary files are removed after the process exits. Escape, the cancel command, note closure, plugin unload and the two-minute timeout terminate the spawned process (and its group on macOS/Linux); remote work already accepted by a provider may still be counted.
@@ -97,7 +97,7 @@ Verified executable versions: Codex CLI **0.159.2**, Claude Code **2.1.278**, Ge
 - For Claude, minimal user wrappers are added when history starts or ends with an assistant turn, to meet Messages API conversation rules without assistant prefilling.
 - Context is read before inserting the loading block. Full-note mode includes text after the cursor; select above-cursor mode when that is unwanted.
 
-The plugin sends Markdown text only. It does not resolve links, read linked notes, upload attachments, or search your vault. Long notes are not silently truncated; context-window errors appear in the answer block.
+The plugin sends Markdown text only. It does not resolve links, read linked notes, upload attachments, or search your vault. Long notes are not silently truncated; context-window errors appear in the answer block. Generated Markdown links, images, vault embeds and raw HTML are escaped as literal text; bold text, lists and valid code spans/fences remain supported. This applies before every streamed edit, including partial replies. Bare URLs may still be linkified by Obsidian or other plugins; clicking them remains a user action. Existing notes and old answer blocks are not rewritten.
 
 ## Build
 
@@ -149,13 +149,13 @@ Reload using the command palette's **Reload app without saving** only after your
 1. Create `<vault>/.obsidian/plugins/riddle-diary/`.
 2. Copy the generated `main.js`, `manifest.json`, and `styles.css` into it.
 3. Reload Obsidian and enable **Riddle Diary** in Community plugins.
-4. Configure your provider and key in Riddle Diary settings.
+4. Configure your provider and select/create its key in Obsidian secret storage from Riddle Diary settings.
 
 On mobile, transfer the same three built files into the mobile vault's configuration folder using your normal file/sync mechanism. Obsidian Sync configuration sync may need to be enabled separately. Select an API provider on mobile; desktop CLI settings may sync but local executables cannot run there. Hardware Enter and mobile keyboard Enter are supported through the CM6 transaction extension; use the command fallback for keyboards that produce unusual composition events.
 
 ## Streaming and CORS
 
-The live transport uses `fetch`, `ReadableStream`, an incremental SSE decoder, and `AbortController`. Claude calls `https://api.anthropic.com/v1/messages`; OpenAI calls `https://api.openai.com/v1/responses`. Only text deltas are written; reasoning events are not rendered. HTTP failures, provider error events, token-limit endings, malformed streams, and premature EOF are handled as failures. Requests time out after two minutes.
+The live transport uses `fetch`, `ReadableStream`, an incremental SSE decoder, and `AbortController`. Claude calls `https://api.anthropic.com/v1/messages`; OpenAI calls `https://api.openai.com/v1/responses`. Only text deltas are written; reasoning events are not rendered. HTTP failures, provider error events, token-limit endings, malformed streams, and premature EOF are handled as failures. Requests time out after two minutes. Live API requests reject redirects. SSE responses are capped at 32 MB total and 8 million characters per frame; buffered responses are checked at 32 MB before JSON parsing. Because requestUrl buffers internally, this check cannot prevent its initial allocation. Every written reply is capped at 2 million characters.
 
 Obsidian's [`requestUrl`](https://docs.obsidian.md/Reference/TypeScript%20API/requestUrl) bypasses CORS but exposes a completed response, not an incremental stream or cancellation signal. Therefore live streaming cannot use it. Claude's browser-access header allows direct browser requests where supported. Device WebViews, network policies, or provider CORS rules may still prevent live `fetch` streaming. The plugin never disables certificate checks and never uses a public relay.
 
@@ -165,7 +165,7 @@ If live streaming fails on desktop or mobile, explicitly choose **Buffered / COR
 
 Replying sends the selected note context and, when enabled, your persona prompt to the selected AI provider. API requests may incur provider charges. OpenAI requests set `store: false`; this is not a guarantee of zero provider retention. Consult your provider's policies.
 
-API keys are saved by Obsidian in `.obsidian/plugins/riddle-diary/data.json` **without encryption** as requested. Password fields conceal them on screen only. Keep that file out of public repositories and account for any vault/config sync. This project ignores `data.json` in Git. CLI executable/model settings are saved there too; CLI login tokens are not read or copied by the plugin. It invokes the signed-in CLI, which manages its own credentials, retention and provider connection. The plugin adds no telemetry; provider CLIs may have their own telemetry settings.
+API keys use [Obsidian SecretStorage](https://docs.obsidian.md/plugins/guides/secret-storage), available since Obsidian 1.11.4. Plugin `data.json` stores only a secret name and model, never the key. Legacy keys are migrated automatically: each key is written under a unique name and read back before plaintext settings are removed. A failed write/read verification stops plugin loading and keeps the original saved settings for retry. Secret storage is managed by Obsidian and is not an isolation boundary against other trusted plugins. Select/create the key on each device; a synced secret name alone is not the credential. Historical backups or previously synced plaintext files are not erased by this migration. CLI executable/model settings are saved there too; CLI login tokens are not read or copied by the plugin. It invokes the signed-in CLI, which manages its own credentials, retention and provider connection. The plugin adds no telemetry; provider CLIs may have their own telemetry settings.
 
 ## Edge cases and limits
 
@@ -191,6 +191,8 @@ Deliberately not implemented / not yet live-verified:
 - Device-specific mobile CORS/keyboard behavior and real authenticated provider responses require live testing with your API account and mobile device. Mocked API tests do not establish that account's model availability.
 
 ## Verification
+
+Security update 1.2.1 (October 2, 2026): production type-check/build and 67 regression tests pass. New tests cover verified secret migration, failed migration preserving legacy settings, settings serialization without keys, secret-backed API requests, escaped model links/embeds/HTML including stream prefixes, private Claude persona files and cleanup, explicit MCP denial, response-size limits, and closed error blocks for oversized text. Account authentication, CLI policy enforcement, mobile behavior and third-party rendering extensions require separate live verification. Desktop smoke check in Obsidian 1.13.7: version 1.2.1 loaded, API settings showed the native secret selectors, the Codex CLI selection was restored, persisted provider data contained only model/secret references, and the separate **Riddle Diary - Güvenlik Deneme** note showed literal image/HTML samples and a completed offline streamed reply. The installed three files matched the production build. No authenticated provider request was made in this security update.
 
 `npm test` runs regression tests for conversation parsing, triggers, tracked editor writes, SSE framing/UTF-8/cancellation, Claude/OpenAI request formats, text-only streaming, buffered responses, missing keys, sanitized errors, premature EOF, and token-limit endings. It bundles tests into a temporary directory and substitutes a test-only Obsidian HTTP adapter; the adapter is never bundled into the plugin.
 
@@ -229,6 +231,8 @@ TomsDiary/
 ├── context.ts
 ├── writer.ts
 ├── settings.ts
+├── credentials.ts
+├── reply-safety.ts
 ├── types.ts
 ├── styles.css
 ├── providers/
@@ -238,6 +242,7 @@ TomsDiary/
 │   ├── openai.ts
 │   ├── cli.ts
 │   ├── cli-process.ts
+│   ├── limits.ts
 │   ├── transport.ts
 │   └── sse.ts
 ├── scripts/
@@ -251,6 +256,8 @@ TomsDiary/
 │   ├── sse.test.ts
 │   ├── providers.test.ts
 │   ├── cli.test.ts
+│   ├── credentials.test.ts
+│   ├── reply-safety.test.ts
 │   ├── settings.test.ts
 │   └── obsidian-mock.ts
 └── examples/

@@ -1,5 +1,6 @@
 import { Platform } from "obsidian";
 import { DiaryError } from "./provider";
+import { MAX_EVENT_CHARACTERS } from "./limits";
 
 // Required lazily: mobile can load the plugin without evaluating Node modules.
 export function desktopRuntime() {
@@ -88,7 +89,7 @@ export async function* runCliLines(invocation: CliInvocation, signal: AbortSigna
       failure = new DiaryError("CLI login is required. Sign in using this CLI in your terminal, then retry from Obsidian.");
       abort(); return;
     }
-    if (pending.length > 8_000_000) {
+    if (pending.length > MAX_EVENT_CHARACTERS) {
       failure = new DiaryError("The CLI emitted an oversized event."); abort(); return;
     }
     let newline: number;
@@ -130,7 +131,10 @@ export async function checkCliInstallation(executable: string): Promise<string> 
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
     let output = "";
-    for await (const line of runCliLines({ ...resolved, args: ["--version"], input: "", cwd: desktopRuntime().os.tmpdir() }, controller.signal)) output += line;
+    for await (const line of runCliLines({ ...resolved, args: ["--version"], input: "", cwd: desktopRuntime().os.tmpdir() }, controller.signal)) {
+      if (output.length + line.length > MAX_EVENT_CHARACTERS) throw new DiaryError("The CLI installation check emitted oversized output.");
+      output += line;
+    }
     return `Found: ${resolved.executable} (${output.replace(/[^\w. ()-]/g, "").slice(0, 100) || "version checked"}). Login remains managed by the CLI.`;
   } catch (error) {
     if (controller.signal.aborted) throw new DiaryError("CLI installation check timed out.");

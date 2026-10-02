@@ -1,5 +1,6 @@
 import { requestUrl } from "obsidian";
 import { DiaryError } from "./provider";
+import { MAX_RESPONSE_BYTES } from "./limits";
 
 export interface ApiRequest {
   url: string;
@@ -26,7 +27,7 @@ export async function fetchStream(request: ApiRequest, signal: AbortSignal): Pro
   try {
     response = await fetch(request.url, {
       method: "POST", headers: request.headers,
-      body: JSON.stringify({ ...request.body, stream: true }), signal
+      body: JSON.stringify({ ...request.body, stream: true }), signal, redirect: "error"
     });
   } catch (error) {
     signal.throwIfAborted();
@@ -53,6 +54,7 @@ export async function bufferedRequest(request: ApiRequest, signal: AbortSignal):
     ]);
     signal.throwIfAborted();
     checkStatus(response.status);
+    if (response.arrayBuffer.byteLength > MAX_RESPONSE_BYTES) throw new DiaryError("The provider response exceeded the diary's size limit.");
     return response.json as unknown;
   } catch (error) {
     signal.throwIfAborted();

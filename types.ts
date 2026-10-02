@@ -35,6 +35,7 @@ export interface CliSettings {
 
 export interface ProviderCredentials {
   apiKey: string;
+  secretId?: string;
   model: string;
 }
 

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { AnthropicProvider } from "../providers/anthropic";
 import { OpenAIProvider } from "../providers/openai";
 import type { Provider, ProviderOptions } from "../providers/provider";
+import { MAX_RESPONSE_BYTES } from "../providers/limits";
 
 const options: ProviderOptions = { apiKey: "fake-test-key", model: "test-model", maxTokens: 2048, transport: "stream" };
 async function collect(provider: Provider, signal = new AbortController().signal) {
@@ -18,6 +19,7 @@ function stream(events: unknown[]) {
 test("Claude sends Messages API fields and yields only text deltas", async t => {
   t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
     assert.equal(url, "https://api.anthropic.com/v1/messages");
+    assert.equal(init.redirect, "error");
     const body = JSON.parse(init.body as string);
     assert.equal(body.system, "persona");
     assert.equal(body.max_tokens, 2048);
@@ -32,6 +34,11 @@ test("Claude sends Messages API fields and yields only text deltas", async t => 
     ]);
   });
   assert.equal(await collect(new AnthropicProvider(options)), "Hello writer.");
+});
+
+test("buffered responses are bounded before JSON parsing and do not leak their body", async t => {
+  t.mock.method(globalThis, "fetch", async () => new Response('raw-private-response'.padEnd(MAX_RESPONSE_BYTES + 1, " ")));
+  await assert.rejects(collect(new OpenAIProvider({ ...options, transport: "buffered" })), error => error instanceof Error && error.message.includes("size limit") && !error.message.includes("raw-private"));
 });
 
 test("OpenAI sends Responses API fields and ignores reasoning events", async t => {

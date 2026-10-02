@@ -3,6 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import { buildMessages, frontmatterEnd, insideAnswer, insideCodeFence } from "./context";
 import { createProvider } from "./providers";
+import { migrateApiKeys, persistedSettings } from "./credentials";
 import { DiaryError } from "./providers/provider";
 import { DiarySettingTab, diaryIdentity, loadSettings } from "./settings";
 import { triggerExtension, type TriggerMatch } from "./trigger";
@@ -29,6 +30,13 @@ export default class RiddleDiaryPlugin extends Plugin {
 
   async onload(): Promise<void> {
     this.settings = loadSettings(await this.loadData() as Partial<DiarySettings> | null);
+    try {
+      if (migrateApiKeys(this.settings, this.app.secretStorage)) await this.saveSettings();
+    } catch {
+      const message = "API keys could not be moved to Obsidian secret storage. Existing saved keys have not been removed. Check secret storage and reload Riddle Diary.";
+      new Notice(message);
+      throw new DiaryError(message);
+    }
     this.addSettingTab(new DiarySettingTab(this.app, this));
     this.registerEditorExtension([
       writerExtension,
@@ -100,7 +108,7 @@ export default class RiddleDiaryPlugin extends Plugin {
     for (const active of this.active.values()) this.cancel(active, "Reply cancelled: diary plugin unloaded.");
   }
 
-  async saveSettings(): Promise<void> { await this.saveData(this.settings); }
+  async saveSettings(): Promise<void> { await this.saveData(persistedSettings(this.settings)); }
 
   private forEditor(view: EditorView): ActiveReply | undefined {
     return [...this.active.values()].find(reply => reply.writer.view === view);
@@ -150,7 +158,7 @@ export default class RiddleDiaryPlugin extends Plugin {
       cursor = changes.mapPos(cursor, 1);
       view.dispatch({ changes, annotations: diaryEdit.of(true) });
     }
-    const provider = createProvider(this.settings);
+    const provider = createProvider(this.settings, this.app.secretStorage);
     const { label, systemPrompt } = diaryIdentity(this.settings);
     const controller = new AbortController();
     const ink = this.settings.inkEffect && !view.dom.ownerDocument.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches;

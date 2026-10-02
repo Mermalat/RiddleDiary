@@ -1,6 +1,6 @@
-import { Notice, Platform, PluginSettingTab, Setting, type App } from "obsidian";
+import { Notice, Platform, PluginSettingTab, SecretComponent, Setting, type App } from "obsidian";
 import type RiddleDiaryPlugin from "./main";
-import { isCliProvider, PROVIDER_CONFIGS, type ApiProviderId, type DiarySettings, type ProviderId, type Transport } from "./types";
+import { isCliProvider, PROVIDER_CONFIGS, type ApiProviderId, type DiarySettings, type ProviderCredentials, type ProviderId, type Transport } from "./types";
 import { checkCliInstallation } from "./providers/cli-process";
 
 export const DEFAULT_PERSONA = `You are an old, mysterious diary whose ink awakens when someone writes to you. Reply directly to the writer in your own quietly theatrical voice: observant, intimate, a little enigmatic, never pompous. Stay concise, usually 1–3 short paragraphs. Match the writer's language. Remember what has already been written. Do not narrate the writer's actions, impersonate them, or invent their feelings. Be helpful and kind; the atmosphere is fictional, not a claim of supernatural powers. Return only your reply, without a heading, provider label, or surrounding horizontal rules.`;
@@ -9,8 +9,8 @@ export const DEFAULT_SETTINGS: DiarySettings = {
   diaryName: "cupcake",
   provider: "anthropic",
   providers: {
-    anthropic: { apiKey: "", model: PROVIDER_CONFIGS[0]!.defaultModel },
-    openai: { apiKey: "", model: PROVIDER_CONFIGS[1]!.defaultModel }
+    anthropic: { apiKey: "", secretId: "", model: PROVIDER_CONFIGS[0]!.defaultModel },
+    openai: { apiKey: "", secretId: "", model: PROVIDER_CONFIGS[1]!.defaultModel }
   },
   cli: {
     "codex-cli": { executable: "codex", model: "" },
@@ -21,7 +21,9 @@ export const DEFAULT_SETTINGS: DiarySettings = {
   plainAssistant: false, maxTokens: 2048, transport: "stream", inkEffect: false
 };
 
-export function loadSettings(data: Partial<DiarySettings> | null): DiarySettings {
+type SavedSettings = Omit<Partial<DiarySettings>, "providers"> & { providers?: Partial<Record<ApiProviderId, Partial<ProviderCredentials>>> };
+
+export function loadSettings(data: SavedSettings | null): DiarySettings {
   const merged = { ...DEFAULT_SETTINGS, ...data,
     providers: {
       anthropic: { ...DEFAULT_SETTINGS.providers.anthropic, ...data?.providers?.anthropic },
@@ -65,7 +67,7 @@ export class DiarySettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.createEl("h2", { text: "Riddle Diary" });
     containerEl.createEl("p", { text: "End a line with your flag and press Enter. The diary writes back beneath it." });
-    containerEl.createEl("p", { cls: "riddle-diary-settings-note", text: "Replies send note context to your chosen provider. API keys are saved unencrypted in plugin data. Desktop CLI providers use the CLI's existing login; no API key is needed for an eligible signed-in account." });
+    containerEl.createEl("p", { cls: "riddle-diary-settings-note", text: "Replies send note context to your chosen provider. API keys use Obsidian secret storage; plugin data contains only the secret name. Model links, embeds and HTML are shown as text. Desktop CLI providers use the CLI's existing login; no API key is needed for an eligible signed-in account." });
 
     new Setting(containerEl).setName("Diary name").setDesc("Choose who writes back, regardless of provider. For example: cupcake → cupcake answers. Up to 60 characters; Markdown formatting is removed.").addText(text => {
       text.setPlaceholder("cupcake").setValue(settings.diaryName).onChange(async value => {
@@ -84,14 +86,12 @@ export class DiarySettingTab extends PluginSettingTab {
     for (const config of PROVIDER_CONFIGS) {
       if (config.kind !== "api" || isCliProvider(settings.provider)) continue;
       const id = config.id as ApiProviderId;
-      new Setting(containerEl).setName(`${config.name} API key`).addText(text => {
-        text.inputEl.type = "password";
-        text.inputEl.autocomplete = "off";
-        text.setPlaceholder("Enter an API key").setValue(settings.providers[id].apiKey).onChange(async value => {
-          settings.providers[id].apiKey = value.trim();
+      new Setting(containerEl).setName(`${config.name} API key`).setDesc("Select or create a key in Obsidian secret storage. Only its name is saved here.").addComponent(el =>
+        new SecretComponent(this.app, el).setValue(settings.providers[id].secretId ?? "").onChange(async value => {
+          settings.providers[id].secretId = value;
           await this.plugin.saveSettings();
-        });
-      });
+        })
+      );
       new Setting(containerEl).setName(`${config.name} model`).setDesc(`Default: ${config.defaultModel}`).addText(text => {
         text.setValue(settings.providers[id].model).onChange(async value => {
           settings.providers[id].model = value.trim();

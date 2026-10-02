@@ -1,5 +1,9 @@
 import { Annotation, findClusterBreak, StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet } from "@codemirror/view";
+import { safeReplyMarkdown } from "./reply-safety";
+import { DiaryError } from "./providers/provider";
+import { MAX_REPLY_CHARACTERS } from "./providers/limits";
+export { safeReplyMarkdown } from "./reply-safety";
 
 export const diaryEdit = Annotation.define<boolean>();
 export const STATUS_MARKER = "<!-- riddle-diary:status -->\n";
@@ -116,19 +120,6 @@ export function boldQuestion(text: string): string {
   return `**${content}**${text.slice(content.length)}`;
 }
 
-/** Keep provider Markdown from accidentally closing our outer answer block. */
-export function safeReplyMarkdown(text: string): string {
-  text = text.replace(/\r\n?/g, "\n").replace(/^---\s*$/gm, "***");
-  let fence: { char: string; length: number } | undefined;
-  for (const line of text.split("\n")) {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    if (!marker) continue;
-    if (!fence) fence = { char: marker[1]![0]!, length: marker[1]!.length };
-    else if (marker[1]![0] === fence.char && marker[1]!.length >= fence.length && /^ {0,3}(`+|~+)\s*$/.test(line)) fence = undefined;
-  }
-  return fence ? `${text}\n${fence.char.repeat(fence.length)}` : text;
-}
-
 /** Edits only the tracked body; CodeMirror maps the user's selections naturally. */
 export class ReplyWriter {
   private text = "";
@@ -166,6 +157,7 @@ export class ReplyWriter {
 
   append(chunk: string): void {
     if (!this.intact) return;
+    if (this.text.length + chunk.length > MAX_REPLY_CHARACTERS) throw new DiaryError("The reply exceeded the diary's text limit.");
     this.text += chunk;
     this.schedule();
   }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { MAX_REPLY_CHARACTERS } from "../providers/limits";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { answerBlocks, buildMessages } from "../context";
@@ -148,4 +149,13 @@ test("editing a block during visual reveal releases drain without overwriting it
   const text = mock.state.doc.toString();
   writer.finish("Cancelled.");
   assert.equal(mock.state.doc.toString(), text);
+});
+
+
+test("oversized provider text leaves a closed error block without inserting the payload", () => {
+  const { mock, writer } = harness();
+  assert.throws(() => writer.append("x".repeat(MAX_REPLY_CHARACTERS + 1)), /text limit/);
+  writer.finish("Reply exceeded its text limit.");
+  assert.equal(answerBlocks(mock.state.doc.toString())[0]?.complete, true);
+  assert.ok(mock.state.doc.toString().length < 500);
 });

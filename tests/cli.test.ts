@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Platform } from "obsidian";
@@ -38,8 +38,37 @@ test("CLI arguments restrict agent behavior and leave the prompt out of argv", (
   const claude = cliArguments("claude-code", "my-model", "/tmp/test");
   assert.equal(claude[claude.indexOf("--tools") + 1], "");
   assert.ok(claude.includes("--safe-mode") && claude.includes("--no-session-persistence"));
+  assert.equal(claude[claude.indexOf("--disallowedTools") + 1], "mcp__*");
   assert.equal(claude[claude.indexOf("--model") + 1], "my-model");
   assert.ok(cliArguments("gemini-cli", "", "/tmp/test").includes("/tmp/test/deny-tools.toml"));
+});
+
+test("Claude persona is a private temporary file, stays out of argv and is removed after reply", { skip: process.platform === "win32" }, async () => {
+  const directory = mkdtempSync(join(tmpdir(), "riddle-diary-fake-claude-"));
+  try {
+    const executable = join(directory, "fake-claude");
+    writeFileSync(executable, `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const file = args[args.indexOf('--system-prompt-file') + 1];
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => input += chunk);
+process.stdin.on('end', () => {
+  const result = { args, input, cwd: process.cwd(), persona: fs.readFileSync(file, 'utf8'), mode: fs.statSync(file).mode & 0o777 };
+  process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', result: JSON.stringify(result) }) + '\\n');
+});
+`, { mode: 0o700 });
+    const provider = new CliProvider("claude-code", { executable, model: "" });
+    let text = "";
+    for await (const chunk of provider.streamReply([{ role: "user", content: "fake-note" }], "fake-private-persona", new AbortController().signal)) text += chunk;
+    const result = JSON.parse(text);
+    assert.ok(!result.args.some((arg: string) => arg.includes("fake-private-persona") || arg.includes("fake-note")));
+    assert.equal(result.persona, "fake-private-persona");
+    assert.equal(result.mode, 0o600);
+    assert.equal(JSON.parse(result.input.split("\n")[1]).messages[0].content, "fake-note");
+    assert.ok(!existsSync(result.cwd));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test("Codex decoder emits completed agent text and skips reasoning and tool output", () => {

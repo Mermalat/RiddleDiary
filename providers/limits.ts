@@ -1,0 +1,3 @@
+export const MAX_REPLY_CHARACTERS = 2_000_000;
+export const MAX_EVENT_CHARACTERS = 8_000_000;
+export const MAX_RESPONSE_BYTES = 32_000_000;
